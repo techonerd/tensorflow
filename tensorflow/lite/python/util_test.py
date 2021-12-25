@@ -115,11 +115,10 @@ class UtilTest(test_util.TensorFlowTestCase):
 
     new_graph_def = convert_to_constants.disable_lower_using_switch_merge(
         sess.graph_def)
-    lower_using_switch_merge_is_removed = False
-    for node in new_graph_def.node:
-      if node.op == "While" or node.op == "StatelessWhile":
-        if not node.attr["_lower_using_switch_merge"].b:
-          lower_using_switch_merge_is_removed = True
+    lower_using_switch_merge_is_removed = any(
+        node.op in ["While", "StatelessWhile"]
+        and not node.attr["_lower_using_switch_merge"].b
+        for node in new_graph_def.node)
     self.assertTrue(lower_using_switch_merge_is_removed)
 
   def testConvertBytes(self):

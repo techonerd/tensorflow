@@ -44,7 +44,7 @@ class XlaSortOpTest(xla_test.XLATestCase, parameterized.TestCase):
             array_ops.placeholder(dtypes.as_dtype(arg.dtype), arg.shape)
             for arg in args
         ]
-        feeds = {placeholders[i]: args[i] for i in range(0, len(args))}
+        feeds = {placeholders[i]: args[i] for i in range(len(args))}
         output = op(*placeholders)
         if isinstance(output, ops.Tensor):
           output = [output]
@@ -311,7 +311,7 @@ class XlaSortOpTest(xla_test.XLATestCase, parameterized.TestCase):
         [dtypes.bfloat16.as_numpy_dtype, np.float16, np.float32, np.float64])
     for dtype in supported_types.intersection(self.numeric_types):
       # TPU implementation is not supported for double precision
-      if (dtype == np.float64 or dtype == np.float16) and self.device == "TPU":
+      if dtype in [np.float64, np.float16] and self.device == "TPU":
         continue
       with self.session() as sess:
         p = array_ops.placeholder(dtype)
@@ -329,7 +329,7 @@ class XlaSortOpTest(xla_test.XLATestCase, parameterized.TestCase):
         [dtypes.bfloat16.as_numpy_dtype, np.float16, np.float32, np.float64])
     for dtype in supported_types.intersection(self.numeric_types):
       # TPU implementation is not supported for double precision
-      if (dtype == np.float64 or dtype == np.float16) and self.device == "TPU":
+      if dtype in [np.float64, np.float16] and self.device == "TPU":
         continue
       with self.session() as sess:
         p = array_ops.placeholder(dtype)

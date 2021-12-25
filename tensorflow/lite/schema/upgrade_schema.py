@@ -226,8 +226,7 @@ class Converter(object):
           "Basic_RNN": "RNN",
       }
 
-      return (old_name_to_new_name[opcode_name]
-              if opcode_name in old_name_to_new_name else opcode_name)
+      return old_name_to_new_name.get(opcode_name, opcode_name)
 
     def RemapOperatorType(operator_type):
       """Remap operator structs from old names to new names.
@@ -248,8 +247,7 @@ class Converter(object):
           "LocalResponseNormOptions": "LocalResponseNormalizationOptions",
           "BasicRNNOptions": "RNNOptions",
       }
-      return (old_to_new[operator_type]
-              if operator_type in old_to_new else operator_type)
+      return old_to_new.get(operator_type, operator_type)
 
     for subgraph in data["subgraphs"]:
       for ops in subgraph["operators"]:
@@ -328,11 +326,8 @@ class Converter(object):
         data_candidate = self._Read(input_file, schema, raw_binary)
       except RuntimeError:
         continue  # Skip and hope another schema works
-      if "version" not in data_candidate:  # Assume version 1 if not present.
+      if "version" not in data_candidate or data_candidate["version"] == 0:  # Assume version 1 if not present.
         data_candidate["version"] = 1
-      elif data_candidate["version"] == 0:  # Version 0 doesn't exist in wild.
-        data_candidate["version"] = 1
-
       if data_candidate["version"] == version:
         self._PerformUpgrade(data_candidate)
         self._Write(data_candidate, output_file)

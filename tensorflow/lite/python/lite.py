@@ -300,24 +300,22 @@ class QuantizationMode(object):
                 self.post_training_fp16())
 
   def activations_type(self):
-    if self.is_integer_quantize():
-      if self._is_int16x8_target_required():
-        return _dtypes.int16
-      else:
-        return _dtypes.int8
-    else:
+    if not self.is_integer_quantize():
       return _dtypes.float32
+    if self._is_int16x8_target_required():
+      return _dtypes.int16
+    else:
+      return _dtypes.int8
 
   def converter_flags(self, inference_ty=None, inference_input_ty=None):
     """Flags to the converter."""
 
     if self.is_integer_quantize():
       return {
-          "inference_type": (
-              inference_ty if inference_ty else self.activations_type()),
+          "inference_type": inference_ty or self.activations_type(),
           "inference_input_type": _dtypes.float32,
-          "post_training_quantize": False,  # disable dynamic range quantization
-          "quantize_to_float16": False  # disable float16 quantization
+          "post_training_quantize": False,
+          "quantize_to_float16": False,
       }
     elif self.post_training_dynamic_range_int8():
       return {
@@ -337,10 +335,10 @@ class QuantizationMode(object):
       # Note this might still trigger (uint8) quantization to be compatible with
       # TOCO.
       return {
-          "inference_type": inference_ty if inference_ty else _dtypes.float32,
+          "inference_type": inference_ty or _dtypes.float32,
           "inference_input_type": inference_input_ty,
-          "post_training_quantize": False,  # enable dynamic range quantization
-          "quantize_to_float16": False  # disable float16 quantization
+          "post_training_quantize": False,
+          "quantize_to_float16": False,
       }
 
   # Below are helpers for the above functions.
@@ -355,17 +353,16 @@ class QuantizationMode(object):
       raise ValueError("TFLITE_BUILTINS_INT8 requires smallest supported "
                        "type to be INT8.")
 
-    if self._representative_dataset:
-      if not isinstance(self._representative_dataset, RepresentativeDataset):
-        self._representative_dataset = RepresentativeDataset(
-            self._representative_dataset)
-      if self._representative_dataset.input_gen is None:
-        raise ValueError(
-            "Provide an input generator for representative_dataset")
-    else:
+    if not self._representative_dataset:
       # TODO(b/162537905): Relax this check for QAT.
       raise ValueError("representative_dataset is required when specifying "
                        "TFLITE_BUILTINS_INT8 or INT8 supported types.")
+    if not isinstance(self._representative_dataset, RepresentativeDataset):
+      self._representative_dataset = RepresentativeDataset(
+          self._representative_dataset)
+    if self._representative_dataset.input_gen is None:
+      raise ValueError(
+          "Provide an input generator for representative_dataset")
 
   def _is_int8_target_required(self):
     return (OpsSet.TFLITE_BUILTINS_INT8 in set(
@@ -397,13 +394,13 @@ class QuantizationMode(object):
 
   def contains_training_quant_op(self):
     """Checks if the graph contains any training-time quantization ops."""
-    training_quant_ops = frozenset({
-        "FakeQuantWithMinMaxVars", "FakeQuantWithMinMaxVarsPerChannel",
-        "FakeQuantWithMinMaxArgs", "FakeQuantWithMinMaxArgsPerChannel",
-        "QuantizeAndDequantizeV2", "QuantizeAndDequantizeV3"
-    })
-
     if self._graph_def:
+      training_quant_ops = frozenset({
+          "FakeQuantWithMinMaxVars", "FakeQuantWithMinMaxVarsPerChannel",
+          "FakeQuantWithMinMaxArgs", "FakeQuantWithMinMaxArgsPerChannel",
+          "QuantizeAndDequantizeV2", "QuantizeAndDequantizeV3"
+      })
+
       for node_def in self._graph_def.node:
         if node_def.op in training_quant_ops:
           return True
@@ -539,11 +536,10 @@ class TFLiteConverterBase(object):
 
   def _contains_function_with_implements_attr(self, saved_model_proto):
     meta_graph = saved_model_proto.meta_graphs[0]
-    for function in meta_graph.graph_def.library.function:
-      if function.attr.get("_implements", None) or function.attr.get(
-          "api_implements", None):
-        return True
-    return False
+    return any(
+        function.attr.get("_implements", None)
+        or function.attr.get("api_implements", None)
+        for function in meta_graph.graph_def.library.function)
 
   def _parse_saved_model_args(self, always_enable_saved_model_import=False):
     """Parses SavedModel arguments from the given Keras/RNN SavedModel.
@@ -657,8 +653,8 @@ class TFLiteConverterBase(object):
         model = self._quantize(
             model, q_in_type, q_out_type, q_activations_type, q_allow_float)
 
-      m_in_type = in_type if in_type else _dtypes.float32
-      m_out_type = out_type if out_type else _dtypes.float32
+      m_in_type = in_type or _dtypes.float32
+      m_out_type = out_type or _dtypes.float32
       model = _modify_model_io_type(model, m_in_type, m_out_type)
 
     if self._sparsify_model():
@@ -1302,10 +1298,7 @@ class TFLiteConverterBaseV1(TFLiteConverterBase):
       warnings.warn("Property %s is deprecated, "
                     "please use optimizations=[Optimize.DEFAULT]"
                     " instead." % name)
-      if value:
-        self.optimizations = [Optimize.DEFAULT]
-      else:
-        self.optimizations = []
+      self.optimizations = [Optimize.DEFAULT] if value else []
       return
     if name == "target_ops":
       warnings.warn("Property %s is deprecated, please use "
@@ -1396,25 +1389,23 @@ class TFLiteConverterBaseV1(TFLiteConverterBase):
       quantized_stats = None
 
     optimized_graph = self._graph_def
-    if not self.saved_model_dir:
-      # Disable grappler constant folding if there are training quant ops.
-      if not quant_mode.contains_training_quant_op():
-        try:
-          # TODO(b/150163103): Merge `disabling lower using switch merge' calls.
-          # Grappler will also try to lower while loop into switch merge
-          # representation which is undesired for Ophints, so we simply remove
-          # those attributes to prevent Grappler from doing so.
-          graph_def = _convert_to_constants.disable_lower_using_switch_merge(
-              optimized_graph)
-          # Run function inlining optimization to ensure any models generated
-          # through the from_frozen_graph path have been inlined.
-          optimized_graph = _run_graph_optimizations(
-              graph_def,
-              self._input_tensors,
-              self._output_tensors,
-              config=self._grappler_config(["function"]))
-        except Exception:  # pylint: disable=broad-except
-          optimized_graph = self._graph_def
+    if not self.saved_model_dir and not quant_mode.contains_training_quant_op():
+      try:
+        # TODO(b/150163103): Merge `disabling lower using switch merge' calls.
+        # Grappler will also try to lower while loop into switch merge
+        # representation which is undesired for Ophints, so we simply remove
+        # those attributes to prevent Grappler from doing so.
+        graph_def = _convert_to_constants.disable_lower_using_switch_merge(
+            optimized_graph)
+        # Run function inlining optimization to ensure any models generated
+        # through the from_frozen_graph path have been inlined.
+        optimized_graph = _run_graph_optimizations(
+            graph_def,
+            self._input_tensors,
+            self._output_tensors,
+            config=self._grappler_config(["function"]))
+      except Exception:  # pylint: disable=broad-except
+        optimized_graph = self._graph_def
 
     self._debug_info = _get_debug_info(self._debug_info_func, optimized_graph)
 

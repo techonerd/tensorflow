@@ -147,8 +147,7 @@ class CalibratorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     quantizer = _calibrator.Calibrator(float_model)
 
     def empty_input_gen():
-      for i in ():
-        yield i
+      yield from ()
 
     with self.assertRaises(RuntimeError):
       quantizer.calibrate_and_quantize(empty_input_gen, dtypes.float32,

@@ -161,13 +161,12 @@ def freeze_graph(session, outputs):
 
 def format_result(t):
   """Convert a tensor to a format that can be used in test specs."""
-  if t.dtype.kind not in [np.dtype(np.string_).kind, np.dtype(np.object_).kind]:
-    # Output 9 digits after the point to ensure the precision is good enough.
-    values = ["{:.9f}".format(value) for value in list(t.flatten())]
-    return ",".join(values)
-  else:
+  if t.dtype.kind in [np.dtype(np.string_).kind, np.dtype(np.object_).kind]:
     # SerializeAsHexString returns bytes in PY3, so decode if appropriate.
     return _pywrap_string_util.SerializeAsHexString(t.flatten()).decode("utf-8")
+  # Output 9 digits after the point to ensure the precision is good enough.
+  values = ["{:.9f}".format(value) for value in list(t.flatten())]
+  return ",".join(values)
 
 
 def write_examples(fp, examples):
@@ -240,17 +239,14 @@ def get_input_shapes_map(input_tensors):
   input_shapes_list = []
 
   for _, shape, _ in input_tensors:
-    dims = None
-    if shape:
-      dims = [dim.value for dim in shape.dims]
+    dims = [dim.value for dim in shape.dims] if shape else None
     input_shapes_list.append(dims)
 
-  input_shapes = {
+  return {
       name: shape
       for name, shape in zip(input_arrays, input_shapes_list)
       if shape
   }
-  return input_shapes
 
 
 def _normalize_output_name(output_name):
@@ -402,10 +398,10 @@ def make_zip_of_tests(options,
         interpreter.invoke()
 
         output_details = interpreter.get_output_details()
-        output_values = []
-        for output_detail in output_details:
-          output_values.append(interpreter.get_tensor(output_detail["index"]))
-
+        output_values = [
+            interpreter.get_tensor(output_detail["index"])
+            for output_detail in output_details
+        ]
         return input_values, output_values
 
       def build_example(label, param_dict_real, zip_path_label):
@@ -426,11 +422,13 @@ def make_zip_of_tests(options,
         """
 
         np.random.seed(RANDOM_SEED)
-        report = {"converter": report_lib.NOTRUN, "tf": report_lib.FAILED}
+        report = {
+            'converter': report_lib.NOTRUN,
+            'tf': report_lib.FAILED,
+            'tf_log': '',
+            'converter_log': '',
+        }
 
-        # Build graph
-        report["tf_log"] = ""
-        report["converter_log"] = ""
         tf.reset_default_graph()
 
         with tf.Graph().as_default():

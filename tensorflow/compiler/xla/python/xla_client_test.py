@@ -589,7 +589,7 @@ def TestFactory(xla_backend, cloud_tpu=False, tfrt_tpu=False,
 
     def testStandardTypes(self):
       for dtype in standard_dtypes:
-        if dtype == bfloat16 or dtype == np.complex128:
+        if dtype in [bfloat16, np.complex128]:
           continue
         arr = self.backend.buffer_from_pyval(np.array([0, 1], dtype))
         arr = arr.to_py()

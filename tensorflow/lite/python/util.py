@@ -175,22 +175,23 @@ def set_tensor_shapes(tensors, shapes):
       `shapes` contains an invalid tensor.
       `shapes` contains an invalid shape for a valid tensor.
   """
-  if shapes:
-    tensor_names_to_tensor = {
-        get_tensor_name(tensor): tensor for tensor in tensors
-    }
-    for name, shape in shapes.items():
-      if name not in tensor_names_to_tensor:
-        raise ValueError("Invalid tensor \'{}\' found in tensor shapes "
-                         "map.".format(name))
-      if shape is not None:
-        tensor = tensor_names_to_tensor[name]
-        try:
-          tensor.set_shape(shape)
-        except ValueError as error:
-          message = ("The shape of tensor '{0}' cannot be changed from {1} to "
-                     "{2}. {3}".format(name, tensor.shape, shape, str(error)))
-          raise ValueError(message)
+  if not shapes:
+    return
+  tensor_names_to_tensor = {
+      get_tensor_name(tensor): tensor for tensor in tensors
+  }
+  for name, shape in shapes.items():
+    if name not in tensor_names_to_tensor:
+      raise ValueError("Invalid tensor \'{}\' found in tensor shapes "
+                       "map.".format(name))
+    if shape is not None:
+      tensor = tensor_names_to_tensor[name]
+      try:
+        tensor.set_shape(shape)
+      except ValueError as error:
+        message = ("The shape of tensor '{0}' cannot be changed from {1} to "
+                   "{2}. {3}".format(name, tensor.shape, shape, str(error)))
+        raise ValueError(message)
 
 
 def get_grappler_config(optimizers_list):
@@ -314,11 +315,10 @@ def is_frozen_graph(sess):
   Returns:
     Bool.
   """
-  for op in sess.graph.get_operations():
-    if six.ensure_str(op.type).startswith("Variable") or six.ensure_str(
-        op.type).endswith("VariableOp"):
-      return False
-  return True
+  return not any(
+      six.ensure_str(op.type).startswith("Variable")
+      or six.ensure_str(op.type).endswith("VariableOp")
+      for op in sess.graph.get_operations())
 
 
 def build_debug_info_func(original_graph):
@@ -680,14 +680,13 @@ def _modify_model_input_type(model, inference_input_type=dtypes.float32):
                 tuple(get_tf_type_name(t) for t in
                       _MAP_QUANT_TO_IO_TYPES.keys()),
                 get_tf_type_name(quant_type)))
-      else:
-        inference_io_types = _MAP_QUANT_TO_IO_TYPES[quant_type]
-        if inference_input_type not in inference_io_types:
-          raise ValueError(
-              "Unsupported `inference_input_type` value. Expected to be in "
-              "{}, instead got {}.".format(
-                  tuple(get_tf_type_name(t) for t in inference_io_types),
-                  get_tf_type_name(inference_input_type)))
+      inference_io_types = _MAP_QUANT_TO_IO_TYPES[quant_type]
+      if inference_input_type not in inference_io_types:
+        raise ValueError(
+            "Unsupported `inference_input_type` value. Expected to be in "
+            "{}, instead got {}.".format(
+                tuple(get_tf_type_name(t) for t in inference_io_types),
+                get_tf_type_name(inference_input_type)))
       input_quant_ops.append(op)
 
   if len(subgraph.inputs) != len(input_quant_ops):
@@ -775,14 +774,13 @@ def _modify_model_output_type(model, inference_output_type=dtypes.float32):
                 tuple(get_tf_type_name(t) for t in
                       _MAP_QUANT_TO_IO_TYPES.keys()),
                 get_tf_type_name(quant_type)))
-      else:
-        inference_io_types = _MAP_QUANT_TO_IO_TYPES[quant_type]
-        if inference_output_type not in inference_io_types:
-          raise ValueError(
-              "Unsupported `inference_output_type` value. Expected to be in "
-              "{}, instead got {}.".format(
-                  tuple(get_tf_type_name(t) for t in inference_io_types),
-                  get_tf_type_name(inference_output_type)))
+      inference_io_types = _MAP_QUANT_TO_IO_TYPES[quant_type]
+      if inference_output_type not in inference_io_types:
+        raise ValueError(
+            "Unsupported `inference_output_type` value. Expected to be in "
+            "{}, instead got {}.".format(
+                tuple(get_tf_type_name(t) for t in inference_io_types),
+                get_tf_type_name(inference_output_type)))
       output_dequant_ops.append(op)
 
   if len(subgraph.outputs) != len(output_dequant_ops):

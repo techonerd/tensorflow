@@ -171,8 +171,7 @@ class ConverterMetricsTest(test_util.TensorFlowTestCase):
     def func(inp):
       conv = tf.nn.conv2d(
           inp, tf.ones([3, 3, 3, 16]), strides=[1, 1, 1, 1], padding='SAME')
-      output = tf.nn.relu(conv, name='output')
-      return output
+      return tf.nn.relu(conv, name='output')
 
     def calibration_gen():
       for _ in range(5):
